@@ -1,4 +1,4 @@
-<?php declare( strict_types = 1 );
+<?php declare( strict_types=1 );
 /**
  * Example fixture class for smoke-testing shared configs.
  *

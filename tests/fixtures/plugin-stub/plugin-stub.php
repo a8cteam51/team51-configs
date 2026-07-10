@@ -1,4 +1,4 @@
-<?php declare( strict_types = 1 );
+<?php declare( strict_types=1 );
 /**
  * Plugin Name: Plugin Stub
  * Description: Minimal WP plugin header used only to give the shared phpstan/phpcs/phpmd rulesets something real to parse and analyze in CI.
