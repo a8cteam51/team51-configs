@@ -18,14 +18,14 @@
 
 	<!-- Run against the PHPCompatibilityWP ruleset and check for cross-version PHP support. -->
 	<rule ref="PHPCompatibilityWP"/>
-	<config name="testVersion" value="8.3-"/>
+	<config name="testVersion" value="8.5-"/>
 
 	<!-- Run against the WordPress-Extra ruleset and check for the minimum supported WP version. -->
 	<rule ref="WordPress-Extra">
 		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase" />
 		<exclude name="WordPress.Files.FileName.InvalidClassFileName" />
 	</rule>
-	<config name="minimum_wp_version" value="6.7"/>
+	<config name="minimum_wp_version" value="7.0"/>
 
 	<!-- Allow additional word delimiters for hook names. -->
 	<rule ref="WordPress.NamingConventions.ValidHookName">
