@@ -4,16 +4,17 @@
 #
 # Each lookup is scoped to this project's containers via the compose service label
 # plus the current directory's basename (wp-env derives its project/container names
-# from the cwd). When concurrent wp-env configs share that basename prefix,
-# `--last 1` selects the most-recently-created match. Both "wordpress" and
-# "tests-wordpress" are checked because wp-env can run either one service or both.
+# from the cwd). When concurrent wp-env configs share that basename prefix, only
+# running containers are matched, and `head -n 1` selects the most-recently-created
+# match among them. Both "wordpress" and "tests-wordpress" are checked because
+# wp-env can run either one service or both.
 set -euo pipefail
 
 PROJECT_NAME="$(basename "$PWD")"
 FOUND_CONTAINER=0
 
 for SERVICE in wordpress tests-wordpress; do
-	CONTAINER_ID="$(docker ps --filter "label=com.docker.compose.service=$SERVICE" --filter "name=$PROJECT_NAME" --last 1 --format '{{.ID}}')"
+	CONTAINER_ID="$(docker ps --filter "label=com.docker.compose.service=$SERVICE" --filter "name=$PROJECT_NAME" --filter status=running --format '{{.ID}}' | head -n 1)"
 
 	if [ -z "$CONTAINER_ID" ]; then
 		continue
