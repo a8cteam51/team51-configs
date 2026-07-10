@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: read
+  # zizmor's SARIF upload in the called workflow needs this — a reusable
+  # workflow can never escalate beyond what the caller grants.
+  security-events: write
 
 jobs:
   workflow-checks:

@@ -56,5 +56,12 @@
 		<properties>
 			<property name="skipIfInheritdoc" value="true" />
 		</properties>
+		<!-- Allow generic type syntax (class-string<X>, list<X>) in docblocks over the erased native hint. -->
+		<exclude name="Squiz.Commenting.FunctionComment.IncorrectTypeHint"/>
+	</rule>
+
+	<rule ref="Squiz.Commenting.FunctionCommentThrowTag.WrongNumber">
+		<!-- Squiz miscounts @throws against implicit throws (e.g. `JSON_THROW_ON_ERROR`). -->
+		<severity>0</severity>
 	</rule>
 </ruleset>

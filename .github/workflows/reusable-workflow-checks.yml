@@ -1,4 +1,5 @@
 name: Workflow Checks
+# Callers wanting Security-tab SARIF upload must grant `security-events: write`.
 
 on:
   workflow_call:

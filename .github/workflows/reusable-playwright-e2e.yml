@@ -57,7 +57,7 @@ permissions:
   contents: read
 
 env:
-  # WP_ENV_VERSION is pinned identically in reusable-release.yml, reusable-phpunit.yml, and reusable-playwright-e2e.yml and must stay in sync — npx-inline @wordpress/env versions are invisible to dependabot, so nothing bumps them together automatically.
+  # WP_ENV_VERSION is pinned identically in reusable-phpunit.yml and reusable-playwright-e2e.yml and must stay in sync — npx-inline @wordpress/env versions are invisible to dependabot, so nothing bumps them together automatically.
   WP_ENV_VERSION: '11.9.0'
 
 jobs:
