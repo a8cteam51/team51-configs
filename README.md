@@ -36,5 +36,3 @@ This package deliberately pins `phpcompatibility/phpcompatibility-wp` to `"*"` b
 "phpcompatibility/phpcompatibility-wp": "^3@alpha",
 "phpcompatibility/php-compatibility": "^10@alpha"
 ```
-
-Stability flags are root-only, so this shared package cannot opt in for you.
