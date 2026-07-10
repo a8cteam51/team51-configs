@@ -10,18 +10,19 @@ on:
     - cron: '17 6 * * 1'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  # zizmor's SARIF upload in the called workflow needs this — a reusable
-  # workflow can never escalate beyond what the caller grants.
-  security-events: write
-  # The called workflow's zizmor job also requests `actions: read` (to scan
-  # workflow metadata) — omitting it here makes the whole reusable-workflow
-  # call invalid and aborts the run before any job starts.
-  actions: read
+permissions: {}
 
 jobs:
   workflow-checks:
+    permissions:
+      contents: read
+      # zizmor's SARIF upload in the called workflow needs this — a reusable
+      # workflow can never escalate beyond what this job grants.
+      security-events: write
+      # The called workflow's zizmor job also requests `actions: read` (to scan
+      # workflow metadata) — omitting it here makes the whole reusable-workflow
+      # call invalid and aborts the run before any job starts.
+      actions: read
     uses: ./.github/workflows/reusable-workflow-checks.yml
 
   # The WP_ENV_VERSION pins in reusable-phpunit.yml and reusable-playwright-e2e.yml must stay
