@@ -1,0 +1,135 @@
+name: PHPUnit
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        description: 'Path to the project (relative to repo root)'
+        type: string
+        required: false
+        default: '.'
+      php-version:
+        description: 'PHP version to run tests against'
+        type: string
+        required: false
+        default: '8.5'
+      wp-version:
+        description: 'WordPress version tag (e.g., "6.9.4"). Leave empty to defer to the consumer plugin''s .wp-env.json `core` setting (or wp-env''s default latest stable).'
+        type: string
+        required: false
+        default: ''
+      wp-env-core:
+        description: 'Full WP_ENV_CORE value. Overrides wp-version when set. Accepts repo refs (Org/Repo#ref) or zip URLs.'
+        type: string
+        required: false
+        default: ''
+      composer-script:
+        description: 'Composer script to invoke for the test run (e.g., test, test:integration).'
+        type: string
+        required: false
+        default: 'test'
+      composer-options:
+        description: 'Composer install options passed to the dependency-install step.'
+        type: string
+        required: false
+        default: '--prefer-dist --ignore-platform-req=php+'
+      node-version:
+        description: 'Node.js version for wp-env CLI'
+        type: string
+        required: false
+        default: '26'
+      wp-env-config-file:
+        description: 'Path to a wp-env config file (relative to project-path). Leave empty to use the default .wp-env.json. Use a separate file per environment (e.g., .wp-env.tests.json) to migrate off the deprecated implicit dev/tests split.'
+        type: string
+        required: false
+        default: ''
+      wp-env-xdebug:
+        description: 'Value for wp-env start --xdebug=<mode>; e.g. ''coverage'' for in-container coverage drivers. Leave empty to start without Xdebug.'
+        type: string
+        required: false
+        default: ''
+      needs-wp-env:
+        description: 'Set false for unit-only suites that do not need a WordPress runtime. When true the npm ci, wp-env start, and wp-env stop steps run and a package.json plus package-lock.json are required; false skips all three.'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  # WP_ENV_VERSION is pinned identically in reusable-release.yml, reusable-phpunit.yml, and reusable-playwright-e2e.yml and must stay in sync — npx-inline @wordpress/env versions are invisible to dependabot, so nothing bumps them together automatically.
+  WP_ENV_VERSION: '11.9.0'
+
+jobs:
+  phpunit:
+    name: PHPUnit (PHP ${{ inputs.php-version }} / WP ${{ inputs.wp-env-core != '' && inputs.wp-env-core || inputs.wp-version != '' && inputs.wp-version || (inputs.needs-wp-env && 'consumer-default' || 'no-wp-env') }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Setup Node.js (for wp-env)
+        if: ${{ inputs.needs-wp-env }}
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.project-path }}/package-lock.json
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        with:
+          working-directory: ${{ inputs.project-path }}
+          composer-options: ${{ inputs.composer-options }}
+
+      - name: Install npm dependencies
+        if: ${{ inputs.needs-wp-env }}
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+
+      - name: Start wp-env
+        if: ${{ inputs.needs-wp-env }}
+        working-directory: ${{ inputs.project-path }}
+        env:
+          # Override priority: wp-env-core (full value) > wp-version (formatted as tag).
+          # If both empty, WP_ENV_CORE is empty and wp-env falls back to the consumer's
+          # config file `core` setting.
+          WP_ENV_CORE: ${{ inputs.wp-env-core != '' && inputs.wp-env-core || (inputs.wp-version != '' && format('WordPress/WordPress#tags/{0}', inputs.wp-version)) || '' }}
+          WP_ENV_CONFIG_FILE: ${{ inputs.wp-env-config-file }}
+          WP_ENV_XDEBUG: ${{ inputs.wp-env-xdebug }}
+        run: |
+          args=()
+          if [ -n "$WP_ENV_CONFIG_FILE" ]; then
+            args+=(--config "$WP_ENV_CONFIG_FILE")
+          fi
+          if [ -n "$WP_ENV_XDEBUG" ]; then
+            args+=(--xdebug="$WP_ENV_XDEBUG")
+          fi
+          npx --yes @wordpress/env@"$WP_ENV_VERSION" start "${args[@]}"
+
+      - name: Run tests
+        working-directory: ${{ inputs.project-path }}
+        env:
+          COMPOSER_SCRIPT: ${{ inputs.composer-script }}
+        run: composer "$COMPOSER_SCRIPT"
+
+      - name: Stop wp-env
+        if: ${{ always() && inputs.needs-wp-env }}
+        working-directory: ${{ inputs.project-path }}
+        env:
+          WP_ENV_CONFIG_FILE: ${{ inputs.wp-env-config-file }}
+        run: |
+          args=()
+          if [ -n "$WP_ENV_CONFIG_FILE" ]; then
+            args+=(--config "$WP_ENV_CONFIG_FILE")
+          fi
+          npx --yes @wordpress/env@"$WP_ENV_VERSION" stop "${args[@]}"

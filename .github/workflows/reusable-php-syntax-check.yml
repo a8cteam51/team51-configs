@@ -1,0 +1,63 @@
+name: PHP Syntax Check
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        description: 'Path to the project (relative to repo root)'
+        type: string
+        required: false
+        default: '.'
+      php-versions:
+        description: 'Non-empty JSON array of PHP versions to check (e.g. [\"8.5\",\"8.6\"])'
+        type: string
+        required: false
+        default: '["8.5"]'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-inputs:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    steps:
+      # An empty JSON array expands to zero matrix jobs and reports success — a silent skip of the syntax check.
+      - name: Reject an empty php-versions array
+        env:
+          PHP_VERSIONS: ${{ inputs.php-versions }}
+        run: |
+          if ! jq -e 'type == "array" and length > 0' <<< "$PHP_VERSIONS" > /dev/null; then
+            echo "::error::php-versions must be a non-empty JSON array — got '$PHP_VERSIONS'."
+            exit 1
+          fi
+
+  syntax:
+    name: Syntax (PHP ${{ matrix.php-version }})
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ${{ fromJSON(inputs.php-versions) }}
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+          tools: none
+
+      - name: Check PHP syntax
+        working-directory: ${{ inputs.project-path }}
+        run: |
+          find . \
+            -path ./vendor -prune -o \
+            -path ./node_modules -prune -o \
+            -name '*.php' -print0 \
+          | xargs -0 -n1 -P4 php -l

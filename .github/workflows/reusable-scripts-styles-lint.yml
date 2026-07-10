@@ -1,0 +1,58 @@
+name: Scripts/Styles Lint
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        description: 'Path to the project (relative to repo root). npm ci runs here, so package.json and a package-lock.json must be present.'
+        type: string
+        required: false
+        default: '.'
+      node-version:
+        description: 'Node.js version'
+        type: string
+        required: false
+        default: '26'
+      lint-scripts:
+        description: 'Run `npm run lint:scripts` (ESLint). Set false for repos without JS sources.'
+        type: boolean
+        required: false
+        default: true
+      lint-styles:
+        description: 'Run `npm run lint:styles` (Stylelint). Set false for repos without CSS sources.'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint scripts/styles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.project-path }}/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+
+      - name: Lint scripts
+        if: ${{ inputs.lint-scripts }}
+        working-directory: ${{ inputs.project-path }}
+        run: npm run lint:scripts
+
+      - name: Lint styles
+        if: ${{ inputs.lint-styles }}
+        working-directory: ${{ inputs.project-path }}
+        run: npm run lint:styles

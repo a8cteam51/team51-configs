@@ -1,0 +1,69 @@
+name: Workflow Checks
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+
+  zizmor:
+    name: Zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Advanced Security mode uploads the SARIF but never fails the job, so the next step gates CI on the result count.
+      - name: Run zizmor
+        id: zizmor
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+
+      - name: Fail on zizmor findings
+        env:
+          SARIF: ${{ steps.zizmor.outputs.output-file }}
+        run: |
+          # Fail closed: only a well-formed SARIF whose runs[].results count is a single integer is
+          # trusted. A missing/empty file, unparseable JSON, parseable-but-non-SARIF JSON ({}, null,
+          # {"runs":{}}), or a multi-document count is an unknown scan result and must not pass — an
+          # empty/non-integer $count would otherwise make `[ -ne 0 ]` error and the `if` fall through.
+          if [ ! -s "$SARIF" ]; then
+            echo "::error::zizmor produced no SARIF at '$SARIF' — cannot confirm a clean scan."
+            exit 1
+          fi
+          if ! count=$(jq 'if (.runs | type) == "array" then reduce .runs[] as $r (0; . + (($r.results // []) | if type == "array" then length else error("run.results is not an array") end)) else error("not a SARIF document") end' "$SARIF"); then
+            echo "::error::zizmor SARIF at '$SARIF' is missing or malformed — cannot confirm a clean scan."
+            exit 1
+          fi
+          # Whole-string integer check (grep is line-oriented, so a multi-document count would slip
+          # through it); anything but a single non-negative integer is an unknown result.
+          case "$count" in
+            '' | *[!0-9]*)
+              echo "::error::unexpected zizmor finding count '$count' — cannot confirm a clean scan."
+              exit 1
+              ;;
+          esac
+          echo "zizmor reported $count finding(s)."
+          if [ "$count" -ne 0 ]; then
+            echo "::error::zizmor reported $count finding(s) — see the Security tab."
+            exit 1
+          fi

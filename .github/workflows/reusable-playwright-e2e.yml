@@ -1,0 +1,159 @@
+name: Playwright E2E
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        description: 'Path to the project (relative to repo root). npm ci runs here, so package.json and a package-lock.json must be present.'
+        type: string
+        required: false
+        default: '.'
+      artifact-slug:
+        description: 'Label for the uploaded failure-report artifact'
+        type: string
+        required: true
+      php-version:
+        description: 'PHP version'
+        type: string
+        required: false
+        default: '8.5'
+      wp-version:
+        description: 'WordPress version tag (e.g., "6.9.4"). Leave empty to defer to the consumer plugin''s .wp-env.json `core` setting (or wp-env''s default latest stable).'
+        type: string
+        required: false
+        default: ''
+      wp-env-core:
+        description: 'Full WP_ENV_CORE value. Overrides wp-version when set. Accepts repo refs (Org/Repo#ref) or zip URLs.'
+        type: string
+        required: false
+        default: ''
+      node-version:
+        description: 'Node.js version'
+        type: string
+        required: false
+        default: '26'
+      composer-options:
+        description: 'Composer install options. The default includes --no-dev; override without it when a scoping pipeline populates dependencies/ during the dev-mode install.'
+        type: string
+        required: false
+        default: '--prefer-dist --no-dev --ignore-platform-req=php+'
+      build-script:
+        description: 'npm script to build assets before starting wp-env. Leave empty to skip (plugins without a frontend build).'
+        type: string
+        required: false
+        default: 'build'
+      wp-env-config-file:
+        description: 'Path to a wp-env config file (relative to project-path). Leave empty to use the default .wp-env.json.'
+        type: string
+        required: false
+        default: ''
+      playwright-script:
+        description: 'npm script that runs the Playwright suite. Override when the plugin wires test:e2e or similar.'
+        type: string
+        required: false
+        default: 'test:e2e'
+
+permissions:
+  contents: read
+
+env:
+  # WP_ENV_VERSION is pinned identically in reusable-release.yml, reusable-phpunit.yml, and reusable-playwright-e2e.yml and must stay in sync — npx-inline @wordpress/env versions are invisible to dependabot, so nothing bumps them together automatically.
+  WP_ENV_VERSION: '11.9.0'
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.project-path }}/package-lock.json
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        with:
+          working-directory: ${{ inputs.project-path }}
+          composer-options: ${{ inputs.composer-options }}
+
+      - name: Install npm dependencies
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+
+      - name: Build assets
+        if: inputs.build-script != ''
+        working-directory: ${{ inputs.project-path }}
+        env:
+          BUILD_SCRIPT: ${{ inputs.build-script }}
+        run: npm run "$BUILD_SCRIPT"
+
+      - name: Resolve Playwright version
+        id: playwright
+        working-directory: ${{ inputs.project-path }}
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers
+        working-directory: ${{ inputs.project-path }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Start wp-env
+        working-directory: ${{ inputs.project-path }}
+        env:
+          # Override priority: wp-env-core (full value) > wp-version (formatted as tag).
+          # If both empty, WP_ENV_CORE is empty and wp-env falls back to the consumer's
+          # config file `core` setting.
+          WP_ENV_CORE: ${{ inputs.wp-env-core != '' && inputs.wp-env-core || (inputs.wp-version != '' && format('WordPress/WordPress#tags/{0}', inputs.wp-version)) || '' }}
+          WP_ENV_CONFIG_FILE: ${{ inputs.wp-env-config-file }}
+        run: |
+          args=()
+          if [ -n "$WP_ENV_CONFIG_FILE" ]; then
+            args+=(--config "$WP_ENV_CONFIG_FILE")
+          fi
+          npx --yes @wordpress/env@"$WP_ENV_VERSION" "${args[@]}" start
+
+      - name: Run Playwright tests
+        working-directory: ${{ inputs.project-path }}
+        env:
+          PLAYWRIGHT_SCRIPT: ${{ inputs.playwright-script }}
+        run: npm run "$PLAYWRIGHT_SCRIPT"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-${{ inputs.artifact-slug }}
+          path: |
+            ${{ inputs.project-path }}/playwright-report
+            ${{ inputs.project-path }}/artifacts
+          retention-days: 7
+
+      - name: Stop wp-env
+        if: always()
+        working-directory: ${{ inputs.project-path }}
+        env:
+          WP_ENV_CONFIG_FILE: ${{ inputs.wp-env-config-file }}
+        run: |
+          args=()
+          if [ -n "$WP_ENV_CONFIG_FILE" ]; then
+            args+=(--config "$WP_ENV_CONFIG_FILE")
+          fi
+          npx --yes @wordpress/env@"$WP_ENV_VERSION" "${args[@]}" stop

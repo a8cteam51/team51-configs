@@ -1,0 +1,184 @@
+name: Supply-Chain Audit
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        description: 'Path to the project (relative to repo root)'
+        type: string
+        required: false
+        default: '.'
+      php-version:
+        description: 'PHP version for composer audit'
+        type: string
+        required: false
+        default: '8.5'
+      node-version:
+        description: 'Node.js version for npm audit'
+        type: string
+        required: false
+        default: '26'
+      composer-audit:
+        description: 'Run `composer audit`. Set false for repos without composer.json. At least one of composer-audit / npm-audit must stay enabled.'
+        type: boolean
+        required: false
+        default: true
+      npm-audit:
+        description: 'Run `npm audit` (installs with npm ci first, so a package-lock.json is required). Set false for repos without package.json. Audits the full dependency graph (dev/build deps included) by default. At least one of composer-audit / npm-audit must stay enabled.'
+        type: boolean
+        required: false
+        default: true
+      composer-audit-flags:
+        description: 'Extra flags passed to `composer audit`. Defaults to --abandoned=report — audits the full graph (dev/build deps included) and fails on security advisories, but reports abandoned packages instead of failing on them. Pass --no-dev to audit production deps only.'
+        type: string
+        required: false
+        default: '--abandoned=report'
+      composer-options:
+        description: 'Composer install options passed to the dependency-install step.'
+        type: string
+        required: false
+        default: '--prefer-dist --ignore-platform-req=php+'
+      npm-audit-flags:
+        description: 'Extra flags passed to `npm audit`. Defaults to --audit-level=high — audits the full graph (dev/build deps included) and fails only on high/critical advisories; low/moderate are surfaced without failing. Pass --omit=dev to audit production deps only.'
+        type: string
+        required: false
+        default: '--audit-level=high'
+      fail-on-findings:
+        description: 'Fail the job when an audit reports findings. Set false to run the audit advisory-only — findings are surfaced in the logs without blocking.'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-inputs:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    steps:
+      # Both audits off leaves no job to run, so the workflow succeeds having audited nothing.
+      - name: Require at least one audit enabled
+        if: ${{ !inputs.composer-audit && !inputs.npm-audit }}
+        run: |
+          echo "::error::Enable composer-audit and/or npm-audit — with both false this audit reports success without auditing anything."
+          exit 1
+
+  composer-audit:
+    if: ${{ inputs.composer-audit }}
+    name: composer audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer:v2
+      - uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        with:
+          working-directory: ${{ inputs.project-path }}
+          composer-options: ${{ inputs.composer-options }}
+      - name: composer audit
+        working-directory: ${{ inputs.project-path }}
+        env:
+          AUDIT_FLAGS: ${{ inputs.composer-audit-flags }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        run: |
+          audit_json="$(mktemp)"
+          set +e
+          # Composer has no distinct findings exit code; advisory mode softens only valid findings JSON.
+          # shellcheck disable=SC2086
+          composer audit $AUDIT_FLAGS --format=json > "$audit_json"
+          status=$?
+          set -e
+          cat "$audit_json"
+
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+
+          if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+            exit "$status"
+          fi
+
+          # shellcheck disable=SC2016
+          AUDIT_JSON="$audit_json" php -r '
+          $data = json_decode(file_get_contents(getenv("AUDIT_JSON")), true);
+          if (!is_array($data) || !array_key_exists("advisories", $data)) {
+              exit(1);
+          }
+          $advisories = $data["advisories"];
+          $abandoned = $data["abandoned"] ?? [];
+          $hasAdvisories = is_array($advisories) && count($advisories) > 0;
+          $hasAbandoned = is_array($abandoned) && count($abandoned) > 0;
+          exit(($hasAdvisories || $hasAbandoned) ? 0 : 1);
+          ' || {
+            echo "::error::composer audit failed before producing a valid findings report."
+            exit "$status"
+          }
+
+          echo "::warning::composer audit reported findings; fail-on-findings=false leaves this advisory-only."
+
+  npm-audit:
+    if: ${{ inputs.npm-audit }}
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.project-path }}/package-lock.json
+      - name: npm ci
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+      - name: npm audit
+        working-directory: ${{ inputs.project-path }}
+        env:
+          AUDIT_FLAGS: ${{ inputs.npm-audit-flags }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        run: |
+          audit_json="$(mktemp)"
+          set +e
+          # shellcheck disable=SC2086
+          npm audit $AUDIT_FLAGS --json > "$audit_json"
+          status=$?
+          set -e
+          cat "$audit_json"
+
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+
+          if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+            exit "$status"
+          fi
+
+          AUDIT_JSON="$audit_json" node <<'NODE' || {
+          const fs = require('fs');
+
+          let data;
+          try {
+            data = JSON.parse(fs.readFileSync(process.env.AUDIT_JSON, 'utf8'));
+          } catch {
+            process.exit(1);
+          }
+
+          if (data.error || !data.metadata || !data.metadata.vulnerabilities) {
+            process.exit(1);
+          }
+
+          const total = Object.values(data.metadata.vulnerabilities).reduce((sum, value) => sum + (Number(value) || 0), 0);
+          process.exit(total > 0 ? 0 : 1);
+          NODE
+            echo "::error::npm audit failed before producing a valid findings report."
+            exit "$status"
+          }
+
+          echo "::warning::npm audit reported findings; fail-on-findings=false leaves this advisory-only."
