@@ -35,7 +35,7 @@ A consumer may override either or both values by adding the corresponding flags 
 
 ## Compatibility shims
 
-[`php/quality-assurance/`](php/quality-assurance) is the canonical home for the PHPCS, PHPStan, and PHPMD configuration. The pre-move `quality-assurance/` paths are frozen compatibility shims, listed in the README's [Layout](README.md#layout) table. A shim's content — the redirect ref/include, or, for `phpmd.dist.xml`, the frozen full copy — is itself part of the BC contract: edit the canonical file under `php/quality-assurance/`, never a shim. The `shim-integrity` job in [`.github/workflows/quality.yml`](.github/workflows/quality.yml) fails CI if a shim's content drifts from its expected form.
+[`php/quality-assurance/`](php/quality-assurance) is the canonical home for the PHPCS and PHPStan configuration. The pre-move `quality-assurance/` paths are frozen compatibility shims, listed in the README's [Layout](README.md#layout) table. A shim's content — the redirect ref/include — is itself part of the BC contract: edit the canonical file under `php/quality-assurance/`, never a shim. The `shim-integrity` job in [`.github/workflows/quality.yml`](.github/workflows/quality.yml) fails CI if a shim's content drifts from its expected form. PHPMD is deprecated and was never moved: `quality-assurance/phpmd.dist.xml` is edited in place and is not covered by `shim-integrity`.
 
 ## Reusable workflow inputs
 

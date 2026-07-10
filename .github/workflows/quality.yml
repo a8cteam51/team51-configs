@@ -134,18 +134,13 @@ jobs:
       - name: Install dependencies
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
 
-      - name: Accept fixture with quality-assurance/phpmd.dist.xml (shim, frozen full copy)
+      - name: Accept fixture with quality-assurance/phpmd.dist.xml (legacy, deprecated)
         run: vendor/bin/phpmd tests/fixtures/plugin-stub/src text quality-assurance/phpmd.dist.xml
-
-      - name: Accept fixture with php/quality-assurance/phpmd.dist.xml (canonical)
-        run: vendor/bin/phpmd tests/fixtures/plugin-stub/src text php/quality-assurance/phpmd.dist.xml
 
   # Guards against shim drift: someone editing a legacy-path file instead of its canonical
   # counterpart. The phpcs/phpstan shims are checked structurally (line count + the exact
-  # redirect line + absence of real rule/parameter content); phpmd's shim is a frozen full
-  # copy instead, because PHPMD resolves <rule ref> against cwd rather than the ruleset
-  # file's own directory, so a redirect ref breaks for real consumers — it is diffed
-  # byte-for-byte against the canonical file instead.
+  # redirect line + absence of real rule/parameter content). PHPMD has no shim to check here:
+  # it never migrated, so quality-assurance/phpmd.dist.xml is its only home.
   shim-integrity:
     name: Shim files are exactly their expected content
     runs-on: ubuntu-latest
@@ -221,11 +216,6 @@ jobs:
           check_phpcs_shim quality-assurance/phpcs.dist.xml
           check_neon_shim quality-assurance/phpstan.dist.neon
           check_neon_php_shim quality-assurance/phpstan.dist.neon.php
-
-          if ! diff <(grep -v 'Compatibility shim' quality-assurance/phpmd.dist.xml) php/quality-assurance/phpmd.dist.xml; then
-            echo "::error::quality-assurance/phpmd.dist.xml (minus its frozen-copy comment) no longer matches php/quality-assurance/phpmd.dist.xml — edit the canonical file and re-sync this frozen copy."
-            fail=1
-          fi
 
           if [ "$fail" -ne 0 ]; then
             exit 1

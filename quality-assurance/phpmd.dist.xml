@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<!-- Compatibility shim (frozen full copy): PHPMD resolves <rule ref> against cwd, not this file's directory, so a passthrough ref breaks for real consumers whose cwd is their own project root; canonical ruleset lives at php/quality-assurance/phpmd.dist.xml — edit there, not here. -->
 <ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://phpmd.org/xml/ruleset_xml_schema_1.0.0.xsd">
 	<rule ref="rulesets/cleancode.xml">
 		<exclude name="MissingImport"/>
