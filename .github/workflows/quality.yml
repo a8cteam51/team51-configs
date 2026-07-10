@@ -1,0 +1,122 @@
+name: Quality
+
+on:
+  pull_request:
+    paths:
+      - 'quality-assurance/**'
+      - 'quality-tools/**'
+      - 'tests/fixtures/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.github/workflows/quality.yml'
+  push:
+    branches: [trunk]
+    paths:
+      - 'quality-assurance/**'
+      - 'quality-tools/**'
+      - 'tests/fixtures/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.github/workflows/quality.yml'
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phpcs-smoke:
+    name: PHPCS dist-file smoke test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+
+      # phpcs -e loads the ruleset and lists its sniffs without scanning any file — the
+      # cheapest possible proof that the XML parses and every <rule ref> still resolves.
+      - name: Explain quality-assurance/phpcs.dist.xml
+        run: vendor/bin/phpcs -e --standard=quality-assurance/phpcs.dist.xml
+
+      # ~100 consumers still <rule ref> this legacy standard (see quality-tools/readme.md);
+      # it is frozen, not dead, and must keep parsing.
+      - name: Explain quality-tools/phpcs.xml.dist
+        run: vendor/bin/phpcs -e --standard=quality-tools/phpcs.xml.dist
+
+      - name: Scan fixture with quality-assurance/phpcs.dist.xml
+        run: vendor/bin/phpcs --standard=quality-assurance/phpcs.dist.xml tests/fixtures/plugin-stub
+
+      # The frozen legacy ruleset predates the house declare-then-docblock file header
+      # (quality-assurance/phpcs.dist.xml excludes PSR12.Files.FileHeader.IncorrectOrder;
+      # this one cannot be changed without breaking its ~100 consumers), so the header
+      # sniff is excluded on the CLI for the fixture scan only.
+      - name: Scan fixture with quality-tools/phpcs.xml.dist
+        run: vendor/bin/phpcs --standard=quality-tools/phpcs.xml.dist --exclude=PSR12.Files.FileHeader tests/fixtures/plugin-stub
+
+  phpstan-smoke:
+    name: PHPStan dist-file smoke test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+
+      # phpstan.dist.neon includes phpstan.dist.neon.php, which discovers paths and the
+      # plugin file via getcwd() and resolves bootstrapFiles via %currentWorkingDirectory%.
+      # Both must resolve from inside the fixture, so this step (not the repo root) is cwd —
+      # tests/fixtures/plugin-stub/vendor is a symlink back to the package's own vendor/ so
+      # the WP stubs bootstrap file is found without a second composer install.
+      - name: Analyse fixture with quality-assurance/phpstan.dist.neon
+        working-directory: tests/fixtures/plugin-stub
+        run: vendor/bin/phpstan analyse -c ../../../quality-assurance/phpstan.dist.neon --no-progress
+
+  phpmd-smoke:
+    name: PHPMD dist-file smoke test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+
+      - name: Accept fixture with quality-assurance/phpmd.dist.xml
+        run: vendor/bin/phpmd tests/fixtures/plugin-stub/src text quality-assurance/phpmd.dist.xml
