@@ -15,6 +15,10 @@ permissions:
   # zizmor's SARIF upload in the called workflow needs this — a reusable
   # workflow can never escalate beyond what the caller grants.
   security-events: write
+  # The called workflow's zizmor job also requests `actions: read` (to scan
+  # workflow metadata) — omitting it here makes the whole reusable-workflow
+  # call invalid and aborts the run before any job starts.
+  actions: read
 
 jobs:
   workflow-checks:
