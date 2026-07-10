@@ -18,7 +18,6 @@
     "wp-coding-standards/wpcs": "^3",
     "phpcompatibility/phpcompatibility-wp": "*",
 
-    "phpmd/phpmd": "^2",
 
     "phpstan/phpstan": "^2",
     "phpstan/extension-installer": "^1",
