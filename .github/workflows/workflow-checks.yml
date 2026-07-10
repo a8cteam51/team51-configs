@@ -19,3 +19,34 @@ permissions:
 jobs:
   workflow-checks:
     uses: ./.github/workflows/reusable-workflow-checks.yml
+
+  # The WP_ENV_VERSION pins in reusable-phpunit.yml and reusable-playwright-e2e.yml must stay
+  # identical — npx-inline @wordpress/env versions are invisible to dependabot, so nothing bumps
+  # them together automatically. This job fails when the two pins drift.
+  wp-env-version-sync:
+    name: wp-env version pins in sync
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Assert WP_ENV_VERSION pins match
+        run: |
+          extract() {
+            sed -n "s/^[[:space:]]*WP_ENV_VERSION:[[:space:]]*'\([^']*\)'.*/\1/p" "$1"
+          }
+          phpunit=$(extract .github/workflows/reusable-phpunit.yml)
+          playwright=$(extract .github/workflows/reusable-playwright-e2e.yml)
+          if [ -z "$phpunit" ] || [ -z "$playwright" ]; then
+            echo "::error::could not extract a WP_ENV_VERSION pin (phpunit='$phpunit', playwright='$playwright') — the env line moved or changed quoting."
+            exit 1
+          fi
+          if [ "$phpunit" != "$playwright" ]; then
+            echo "::error::WP_ENV_VERSION pins differ: reusable-phpunit.yml has '$phpunit' but reusable-playwright-e2e.yml has '$playwright' — they must stay identical."
+            exit 1
+          fi
+          echo "WP_ENV_VERSION pins match: $phpunit"
