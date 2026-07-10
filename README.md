@@ -4,17 +4,29 @@ team51-configs is a shared package of quality-assurance configurations, includin
 
 ## PHPMD
 
-PHPMD is deprecated for new projects because the PHPStan strict stack supersedes it. It remains in this package for backwards compatibility with existing consumers and will be removed once team51-project-scaffold migrates off it.
+PHPMD is retained for backwards compatibility with existing consumers. The PHPStan strict stack is the static-analysis configuration for new projects.
+
+## Reusable workflows
+
+See [Reusable workflows](docs/workflows.md) for the `workflow_call` inputs and caller examples for each workflow.
 
 ## Version pinning
 
-Consumers normally require `a8cteam51/team51-configs` at `dev-trunk` to receive current changes. Once `vX.Y.Z` tags exist, consumers that need an immutable Composer pin can use a semantic-version constraint instead, for example:
+Consumers require `a8cteam51/team51-configs` at `dev-trunk` by default to track the latest state. A consumer that selects tagged releases uses a semantic-version constraint against `vX.Y.Z` tags, for example:
 
 ```json
 "a8cteam51/team51-configs": "^1.0"
 ```
 
-Reusable workflows currently use a mutable branch reference such as `uses: a8cteam51/team51-configs/.github/workflows/reusable-*.yml@<branch>`. Once fixed `vX` tags exist, consumers can use `@vX` or a full commit SHA instead for an immutable, supply-chain-safer reference.
+The consumer's Composer lock file records the resolved release and source reference for reproducible installs.
+
+A reusable-workflow reference uses a fixed `vX` tag or a full commit SHA:
+
+```yaml
+uses: a8cteam51/team51-configs/.github/workflows/reusable-*.yml@vX
+```
+
+A full SHA is intrinsically immutable, and published tags are fixed by this repository's no-retagging policy. A bare branch name in the `uses:` position is mutable and less supply-chain-safe than a tag or SHA pin.
 
 ## PHP 8.x compatibility sniffs
 
