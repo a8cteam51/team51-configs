@@ -2,6 +2,10 @@
 
 This guide covers consumer rulesets that reference [`quality-tools/phpcs.xml.dist`](../quality-tools/phpcs.xml.dist) and adopt [`quality-assurance/phpcs.dist.xml`](../quality-assurance/phpcs.dist.xml).
 
+## A separate move: the php/ canonical home
+
+Independently of the `quality-tools` → `quality-assurance` migration this guide covers, the PHPCS, PHPStan, and PHPMD configuration under `quality-assurance/` has a canonical home at [`php/quality-assurance/`](../php/quality-assurance). The `quality-assurance/` paths referenced throughout this guide remain valid — they are frozen compatibility shims that redirect to the canonical files, not removed paths. See [Layout](../README.md#layout) in the README for the full old-path-to-new-path table. A consumer migrating off `quality-tools/phpcs.xml.dist` may reference either `quality-assurance/phpcs.dist.xml` (the shim) or `php/quality-assurance/phpcs.dist.xml` (the canonical file) — both resolve identically.
+
 ## Ruleset differences
 
 | Area | `quality-tools/phpcs.xml.dist` | `quality-assurance/phpcs.dist.xml` |

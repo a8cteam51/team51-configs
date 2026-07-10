@@ -1,0 +1,3 @@
+# Compatibility shim (frozen): canonical config lives at php/quality-assurance/phpstan.dist.neon; do not add parameters here.
+includes:
+    - ../php/quality-assurance/phpstan.dist.neon

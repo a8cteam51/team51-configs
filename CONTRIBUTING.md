@@ -33,6 +33,10 @@ A consumer may override either or both values by adding the corresponding flags 
 "lint:php:phpcs": "phpcs --standard=./.phpcs.xml --runtime-set testVersion 8.3- --runtime-set minimum_wp_version 6.7 --basepath=. ./ -v"
 ```
 
+## Compatibility shims
+
+[`php/quality-assurance/`](php/quality-assurance) is the canonical home for the PHPCS, PHPStan, and PHPMD configuration. The pre-move `quality-assurance/` paths are frozen compatibility shims, listed in the README's [Layout](README.md#layout) table. A shim's content — the redirect ref/include, or, for `phpmd.dist.xml`, the frozen full copy — is itself part of the BC contract: edit the canonical file under `php/quality-assurance/`, never a shim. The `shim-integrity` job in [`.github/workflows/quality.yml`](.github/workflows/quality.yml) fails CI if a shim's content drifts from its expected form.
+
 ## Reusable workflow inputs
 
 An existing `workflow_call` input name is frozen once a consumer references it. Renaming it can prevent the consumer's `with: <old-name>:` value from taking effect or make the call invalid. Adding a new optional input with a default is permitted. Renaming or removing an existing input requires a major or breaking-change discussion first, not a silent pull request.

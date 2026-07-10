@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<!-- Compatibility shim (frozen): canonical ruleset lives at php/quality-assurance/phpcs.dist.xml; do not add rules here. -->
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../vendor/squizlabs/php_codesniffer/phpcs.xsd">
+	<rule ref="../php/quality-assurance/phpcs.dist.xml"/>
+</ruleset>

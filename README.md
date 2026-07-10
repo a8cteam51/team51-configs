@@ -2,6 +2,21 @@
 
 team51-configs is a shared package of quality-assurance configurations, including PHPCS, PHPStan, and PHPMD rulesets, and reusable GitHub Actions CI workflows for linting, syntax checks, PHPUnit, Playwright E2E, supply-chain audits, and workflow checks across Team51 repositories.
 
+## Layout
+
+[`php/quality-assurance/`](php/quality-assurance) is the canonical home for the shared PHPCS, PHPStan, and PHPMD configuration. The pre-move `quality-assurance/` paths remain in place as frozen compatibility shims — every existing `<rule ref>`, `includes:`, and `require` path a consumer already uses keeps resolving with no changes required:
+
+| Old path (frozen shim) | New canonical path |
+| --- | --- |
+| `quality-assurance/phpcs.dist.xml` | `php/quality-assurance/phpcs.dist.xml` |
+| `quality-assurance/phpstan.dist.neon` | `php/quality-assurance/phpstan.dist.neon` |
+| `quality-assurance/phpstan.dist.neon.php` | `php/quality-assurance/phpstan.dist.neon.php` |
+| `quality-assurance/phpmd.dist.xml` | `php/quality-assurance/phpmd.dist.xml` |
+
+Three of the four shims (`phpcs.dist.xml`, `phpstan.dist.neon`, `phpstan.dist.neon.php`) are one-line redirects to the canonical file. `quality-assurance/phpmd.dist.xml` is a frozen full copy instead: PHPMD resolves `<rule ref>` against the process's working directory rather than the referencing ruleset file's own directory, so a redirect ref there would resolve incorrectly for a real consumer running phpmd from its own project root. Every shim carries a one-line comment marking it as frozen; edit the canonical file under `php/quality-assurance/`, never the shim.
+
+Migrating an include path to the canonical location is optional and may happen at a consumer's own pace — the old paths are a permanent compatibility tier, not deprecated-with-a-cutoff. `quality-tools/phpcs.xml.dist` is unrelated to this move: it is a separate, older, intentionally different ruleset (see [Migrating to the quality-assurance ruleset](docs/migrating-to-quality-assurance.md)) and stays exactly where it is. `docker/` and `composer/` are unaffected by this layout.
+
 ## PHPMD
 
 PHPMD is retained for backwards compatibility with existing consumers. The PHPStan strict stack is the static-analysis configuration for new projects.

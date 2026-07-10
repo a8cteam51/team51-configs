@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'quality-assurance/**'
+      - 'php/quality-assurance/**'
       - 'quality-tools/**'
       - 'tests/fixtures/**'
       - 'composer.json'
@@ -13,6 +14,7 @@ on:
     branches: [trunk]
     paths:
       - 'quality-assurance/**'
+      - 'php/quality-assurance/**'
       - 'quality-tools/**'
       - 'tests/fixtures/**'
       - 'composer.json'
@@ -49,16 +51,24 @@ jobs:
 
       # phpcs -e loads the ruleset and lists its sniffs without scanning any file — the
       # cheapest possible proof that the XML parses and every <rule ref> still resolves.
-      - name: Explain quality-assurance/phpcs.dist.xml
+      - name: Explain quality-assurance/phpcs.dist.xml (shim)
         run: vendor/bin/phpcs -e --standard=quality-assurance/phpcs.dist.xml
+
+      # The canonical file the shim above redirects to — a break here fails independently
+      # of whether the shim's own <rule ref> still resolves.
+      - name: Explain php/quality-assurance/phpcs.dist.xml (canonical)
+        run: vendor/bin/phpcs -e --standard=php/quality-assurance/phpcs.dist.xml
 
       # ~100 consumers still <rule ref> this legacy standard (see quality-tools/readme.md);
       # it is frozen, not dead, and must keep parsing.
       - name: Explain quality-tools/phpcs.xml.dist
         run: vendor/bin/phpcs -e --standard=quality-tools/phpcs.xml.dist
 
-      - name: Scan fixture with quality-assurance/phpcs.dist.xml
+      - name: Scan fixture with quality-assurance/phpcs.dist.xml (shim)
         run: vendor/bin/phpcs --standard=quality-assurance/phpcs.dist.xml tests/fixtures/plugin-stub
+
+      - name: Scan fixture with php/quality-assurance/phpcs.dist.xml (canonical)
+        run: vendor/bin/phpcs --standard=php/quality-assurance/phpcs.dist.xml tests/fixtures/plugin-stub
 
       # The frozen legacy ruleset predates the house declare-then-docblock file header
       # (quality-assurance/phpcs.dist.xml excludes PSR12.Files.FileHeader.IncorrectOrder;
@@ -93,9 +103,15 @@ jobs:
       # Both must resolve from inside the fixture, so this step (not the repo root) is cwd —
       # tests/fixtures/plugin-stub/vendor is a symlink back to the package's own vendor/ so
       # the WP stubs bootstrap file is found without a second composer install.
-      - name: Analyse fixture with quality-assurance/phpstan.dist.neon
+      - name: Analyse fixture with quality-assurance/phpstan.dist.neon (shim)
         working-directory: tests/fixtures/plugin-stub
         run: vendor/bin/phpstan analyse -c ../../../quality-assurance/phpstan.dist.neon --no-progress
+
+      # Same fixture, canonical path — proves the moved file (and its sibling .neon.php
+      # include, relocated alongside it) resolves independently of the shim chain.
+      - name: Analyse fixture with php/quality-assurance/phpstan.dist.neon (canonical)
+        working-directory: tests/fixtures/plugin-stub
+        run: vendor/bin/phpstan analyse -c ../../../php/quality-assurance/phpstan.dist.neon --no-progress
 
   phpmd-smoke:
     name: PHPMD dist-file smoke test
@@ -118,5 +134,100 @@ jobs:
       - name: Install dependencies
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
 
-      - name: Accept fixture with quality-assurance/phpmd.dist.xml
+      - name: Accept fixture with quality-assurance/phpmd.dist.xml (shim, frozen full copy)
         run: vendor/bin/phpmd tests/fixtures/plugin-stub/src text quality-assurance/phpmd.dist.xml
+
+      - name: Accept fixture with php/quality-assurance/phpmd.dist.xml (canonical)
+        run: vendor/bin/phpmd tests/fixtures/plugin-stub/src text php/quality-assurance/phpmd.dist.xml
+
+  # Guards against shim drift: someone editing a legacy-path file instead of its canonical
+  # counterpart. The phpcs/phpstan shims are checked structurally (line count + the exact
+  # redirect line + absence of real rule/parameter content); phpmd's shim is a frozen full
+  # copy instead, because PHPMD resolves <rule ref> against cwd rather than the ruleset
+  # file's own directory, so a redirect ref breaks for real consumers — it is diffed
+  # byte-for-byte against the canonical file instead.
+  shim-integrity:
+    name: Shim files are exactly their expected content
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Assert phpcs/phpstan shims are untouched redirects, and phpmd shim matches canonical
+        run: |
+          fail=0
+
+          check_phpcs_shim() {
+            local path="$1" n
+            n=$(wc -l < "$path" | tr -d ' ')
+            if [ "$n" != "5" ]; then
+              echo "::error::$path has $n lines, expected 5 — a shim carries only the xml decl, one comment, the ruleset tags, and a single <rule ref>."
+              fail=1
+              return
+            fi
+            if ! grep -qxF '	<rule ref="../php/quality-assurance/phpcs.dist.xml"/>' "$path"; then
+              echo "::error::$path is missing its expected redirect <rule ref> to php/quality-assurance/phpcs.dist.xml."
+              fail=1
+              return
+            fi
+            if grep -qE '<(config|exclude-pattern|arg)' "$path"; then
+              echo "::error::$path contains rule content beyond a redirect — edit php/quality-assurance/phpcs.dist.xml instead."
+              fail=1
+            fi
+          }
+
+          check_neon_shim() {
+            local path="$1" n
+            n=$(wc -l < "$path" | tr -d ' ')
+            if [ "$n" != "3" ]; then
+              echo "::error::$path has $n lines, expected 3 — a shim carries only the comment, 'includes:', and the redirect path."
+              fail=1
+              return
+            fi
+            if ! grep -qxF '    - ../php/quality-assurance/phpstan.dist.neon' "$path"; then
+              echo "::error::$path is missing its expected includes: redirect to php/quality-assurance/phpstan.dist.neon."
+              fail=1
+              return
+            fi
+            if grep -qE '^parameters:' "$path"; then
+              echo "::error::$path defines parameters directly — edit php/quality-assurance/phpstan.dist.neon instead."
+              fail=1
+            fi
+          }
+
+          check_neon_php_shim() {
+            local path="$1" n
+            n=$(wc -l < "$path" | tr -d ' ')
+            if [ "$n" != "3" ]; then
+              echo "::error::$path has $n lines, expected 3 — a shim carries only the declare, one comment, and a require/return passthrough."
+              fail=1
+              return
+            fi
+            if ! grep -qxF "return require __DIR__ . '/../php/quality-assurance/phpstan.dist.neon.php';" "$path"; then
+              echo "::error::$path is missing its expected require/return passthrough to php/quality-assurance/phpstan.dist.neon.php."
+              fail=1
+              return
+            fi
+            if grep -qE 'getcwd\(\)' "$path"; then
+              echo "::error::$path contains discovery logic directly — edit php/quality-assurance/phpstan.dist.neon.php instead."
+              fail=1
+            fi
+          }
+
+          check_phpcs_shim quality-assurance/phpcs.dist.xml
+          check_neon_shim quality-assurance/phpstan.dist.neon
+          check_neon_php_shim quality-assurance/phpstan.dist.neon.php
+
+          if ! diff <(grep -v 'Compatibility shim' quality-assurance/phpmd.dist.xml) php/quality-assurance/phpmd.dist.xml; then
+            echo "::error::quality-assurance/phpmd.dist.xml (minus its frozen-copy comment) no longer matches php/quality-assurance/phpmd.dist.xml — edit the canonical file and re-sync this frozen copy."
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All shims match their expected content."
