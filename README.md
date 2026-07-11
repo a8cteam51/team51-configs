@@ -25,6 +25,25 @@ PHPMD is deprecated and retained only for backwards compatibility with existing 
 
 See [Reusable workflows](docs/workflows.md) for the `workflow_call` inputs and caller examples for each workflow.
 
+## Node configs
+
+The npm package ships four base configs under `node/`, exported through the `package.json` `exports` map for imports such as `@a8cteam51/team51-configs/node/<file>`:
+
+- `./node/eslint.config.base.mjs` — flat ESLint baseline combining the WordPress recommended, test-unit, and test-playwright configs; import it and append project overrides.
+- `./node/stylelint.config.base.js` — Stylelint baseline extending `@wordpress/stylelint-config/scss`; spread it into the consumer's config rather than using `extends`, which drops `ignoreFiles`.
+- `./node/playwright.config.base.js` — Playwright baseline spreading `@wordpress/scripts/config/playwright.config.js` with `testDir` defaulted to `tests/EndToEnd`; spread it and override individual nested keys such as `use`, `webServer`, and `projects` as needed.
+- `./node/tsconfig.base.json` — TypeScript compiler-option deltas assuming modern TypeScript 6+ defaults; extend it from a consumer `tsconfig.json`.
+
+A consumer adds this repository as an npm git dependency:
+
+```json
+"@a8cteam51/team51-configs": "github:a8cteam51/team51-configs#<tag-or-sha>"
+```
+
+The [Version pinning](#version-pinning) section documents the semver-tag and SHA pinning discipline used for Composer and reusable workflows. The same discipline applies here: use a tag or full SHA, never a bare branch.
+
+Unlike a registry dependency, Dependabot and Renovate cannot, in the general case, see or bump a `github:` git-dependency ref automatically the way they track registry semver ranges. Bumping to a new tag or SHA requires a manual edit to the consumer's `package.json`.
+
 ## Version pinning
 
 Consumers require `a8cteam51/team51-configs` at `dev-trunk` by default to track the latest state. A consumer that selects tagged releases uses a semantic-version constraint against `vX.Y.Z` tags, for example:
